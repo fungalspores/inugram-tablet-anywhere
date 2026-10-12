@@ -2,7 +2,7 @@
 // @name         Tablet Anywhere
 // @id           com.github.fungalspores.tablet-anywhere
 // @author       fungalspores
-// @version      1.2.0
+// @version      1.2.3
 // @description  Two-pane tablet layout in split-screen, windows and portrait, not only fullscreen
 // @description:ru Планшетный режим (две панели) в split-screen, окне и портрете, а не только на весь экран
 // @icon         inu://settings
@@ -241,11 +241,204 @@ disposers.push(inu.xposed.hookAllOverloads(AU, "getTabletLeftFragmentSize", {
     tries: []
   }, [RATIO, AU, MIN_RIGHT_DP, MIN_LEFT_DP])
 }));
+var JMath = inu.jvm.cls("java.lang.Math");
+var ChatActivity = inu.jvm.cls("org.telegram.ui.ChatActivity");
+disposers.push(inu.xposed.hookAllOverloads(AU, "getMinTabletSide", {
+  before: inu.xposed.routine({
+    v: 1,
+    source: `
+    (ctx) => {
+        const r = RATIO.get()
+        if (r <= 0) return
+        const a = LA.instance
+        if (a === null || a.tabletFullSize) return
+        let width = AU.displaySize.x
+        const l = a.launchLayout
+        if (l !== null && l.getMeasuredWidth() > 0) width = l.getMeasuredWidth()
+        let left = width * r / 1000
+        const maxL = width - AU.dp(MIN_RIGHT_DP)
+        const minL = AU.dp(MIN_LEFT_DP)
+        if (left > maxL) left = maxL
+        if (left < minL) left = minL
+        ctx.setReturnValue(JMath.round(width - left))
+      }`,
+    captures: ["RATIO", "LA", "AU", "MIN_RIGHT_DP", "MIN_LEFT_DP", "JMath"],
+    slots: 3,
+    code: [
+      ["capture", 0],
+      ["capture", 1],
+      ["capture", 2],
+      ["capture", 3],
+      ["capture", 4],
+      ["capture", 5],
+      ["call", 0, ["get"], []],
+      ["le", 6, [0]],
+      ["jumpIfFalsy", 7, 10],
+      ["return"],
+      ["get", 1, ["instance"]],
+      ["eq", 10, [null]],
+      ["setSlot", 0, 11],
+      ["jumpIfTruthy", 11, 16],
+      ["get", 10, ["tabletFullSize"]],
+      ["setSlot", 0, 14],
+      ["getSlot", 0],
+      ["jumpIfFalsy", 16, 19],
+      ["return"],
+      ["get", 2, ["displaySize"]],
+      ["get", 19, ["x"]],
+      ["setSlot", 1, 20],
+      ["get", 10, ["launchLayout"]],
+      ["ne", 22, [null]],
+      ["setSlot", 0, 23],
+      ["jumpIfFalsy", 23, 29],
+      ["call", 22, ["getMeasuredWidth"], []],
+      ["gt", 26, [0]],
+      ["setSlot", 0, 27],
+      ["getSlot", 0],
+      ["jumpIfFalsy", 29, 33],
+      ["call", 22, ["getMeasuredWidth"], []],
+      ["setSlot", 1, 31],
+      ["getSlot", 1],
+      ["mul", 33, 6],
+      ["div", 34, [1e3]],
+      ["setSlot", 2, 35],
+      ["getSlot", 1],
+      ["call", 2, ["dp"], [3]],
+      ["sub", 37, 38],
+      ["call", 2, ["dp"], [4]],
+      ["getSlot", 2],
+      ["gt", 41, 39],
+      ["jumpIfFalsy", 42, 45],
+      ["setSlot", 2, 39],
+      ["getSlot", 2],
+      ["lt", 45, 40],
+      ["jumpIfFalsy", 46, 49],
+      ["setSlot", 2, 40],
+      ["getSlot", 1],
+      ["getSlot", 2],
+      ["sub", 49, 50],
+      ["call", 5, ["round"], [51]],
+      ["setResult", 52]
+    ],
+    tries: []
+  }, [RATIO, LA, AU, MIN_RIGHT_DP, MIN_LEFT_DP, JMath])
+}));
+var ChatMessageCell = inu.jvm.cls("org.telegram.ui.Cells.ChatMessageCell");
+disposers.push(inu.xposed.hookAllOverloads(ChatMessageCell, "getGroupPhotosWidth", {
+  before: inu.xposed.routine({
+    v: 1,
+    source: `
+    (ctx) => {
+        const a = LA.instance
+        if (a === null || a.tabletFullSize || a.rightActionBarLayout === null) return
+        const l = a.launchLayout
+        if (l === null) return
+        const mo = ctx.thisObject.getMessageObject()
+        if (mo !== null && mo.preview) return
+        let width = l.getMeasuredWidth()
+        if (width <= 0) width = AU.displaySize.x
+        const r = RATIO.get()
+        let left = 0
+        if (r > 0) {
+          left = width * r / 1000
+          const maxL = width - AU.dp(MIN_RIGHT_DP)
+          const minL = AU.dp(MIN_LEFT_DP)
+          if (left > maxL) left = maxL
+          if (left < minL) left = minL
+        } else {
+          left = width * 35 / 100
+          const stockMin = AU.dp(320)
+          if (left < stockMin) left = stockMin
+        }
+        ctx.setReturnValue(width - left)
+      }`,
+    captures: ["LA", "AU", "RATIO", "MIN_RIGHT_DP", "MIN_LEFT_DP"],
+    slots: 3,
+    code: [
+      ["capture", 0],
+      ["capture", 1],
+      ["capture", 2],
+      ["capture", 3],
+      ["capture", 4],
+      ["get", 0, ["instance"]],
+      ["eq", 5, [null]],
+      ["setSlot", 0, 6],
+      ["jumpIfTruthy", 6, 11],
+      ["get", 5, ["tabletFullSize"]],
+      ["setSlot", 0, 9],
+      ["getSlot", 0],
+      ["setSlot", 0, 11],
+      ["jumpIfTruthy", 11, 17],
+      ["get", 5, ["rightActionBarLayout"]],
+      ["eq", 14, [null]],
+      ["setSlot", 0, 15],
+      ["getSlot", 0],
+      ["jumpIfFalsy", 17, 20],
+      ["return"],
+      ["get", 5, ["launchLayout"]],
+      ["eq", 20, [null]],
+      ["jumpIfFalsy", 21, 24],
+      ["return"],
+      ["this"],
+      ["call", 24, ["getMessageObject"], []],
+      ["ne", 25, [null]],
+      ["setSlot", 0, 26],
+      ["jumpIfFalsy", 26, 31],
+      ["get", 25, ["preview"]],
+      ["setSlot", 0, 29],
+      ["getSlot", 0],
+      ["jumpIfFalsy", 31, 34],
+      ["return"],
+      ["call", 20, ["getMeasuredWidth"], []],
+      ["setSlot", 1, 34],
+      ["getSlot", 1],
+      ["le", 36, [0]],
+      ["jumpIfFalsy", 37, 42],
+      ["get", 1, ["displaySize"]],
+      ["get", 39, ["x"]],
+      ["setSlot", 1, 40],
+      ["call", 2, ["get"], []],
+      ["setSlot", 2, [0]],
+      ["gt", 42, [0]],
+      ["jumpIfFalsy", 44, 63],
+      ["getSlot", 1],
+      ["mul", 46, 42],
+      ["div", 47, [1e3]],
+      ["setSlot", 2, 48],
+      ["getSlot", 1],
+      ["call", 1, ["dp"], [3]],
+      ["sub", 50, 51],
+      ["call", 1, ["dp"], [4]],
+      ["getSlot", 2],
+      ["gt", 54, 52],
+      ["jumpIfFalsy", 55, 58],
+      ["setSlot", 2, 52],
+      ["getSlot", 2],
+      ["lt", 58, 53],
+      ["jumpIfFalsy", 59, 62],
+      ["setSlot", 2, 53],
+      ["jump", 72],
+      ["getSlot", 1],
+      ["mul", 63, [35]],
+      ["div", 64, [100]],
+      ["setSlot", 2, 65],
+      ["call", 1, ["dp"], [[320]]],
+      ["getSlot", 2],
+      ["lt", 68, 67],
+      ["jumpIfFalsy", 69, 72],
+      ["setSlot", 2, 67],
+      ["getSlot", 1],
+      ["getSlot", 2],
+      ["sub", 72, 73],
+      ["setResult", 74]
+    ],
+    tries: []
+  }, [LA, AU, RATIO, MIN_RIGHT_DP, MIN_LEFT_DP])
+}));
 var GradientDrawable = inu.jvm.cls("android.graphics.drawable.GradientDrawable");
 var LayerDrawable = inu.jvm.cls("android.graphics.drawable.LayerDrawable");
 var Drawable = inu.jvm.cls("android.graphics.drawable.Drawable");
 var JArray = inu.jvm.cls("java.lang.reflect.Array");
-var JMath = inu.jvm.cls("java.lang.Math");
 var View = inu.jvm.cls("android.view.View");
 var PointerIcon = inu.jvm.cls("android.view.PointerIcon");
 var MeasureSpec = inu.jvm.cls("android.view.View$MeasureSpec");
@@ -315,6 +508,22 @@ var GripTouch = inu.jvm.defineClass({
                           for (let i = 0; i < w.getChildCount(); i++) q.add(w.getChildAt(i))
                         }
                       }
+                      try {
+                        const rl = a.rightActionBarLayout
+                        const f = rl === null ? null : rl.getLastFragment()
+                        if (f !== null && f instanceof ChatActivity) {
+                          const msgs = f.messages
+                          if (msgs !== null) {
+                            for (const m of msgs) {
+                              m.forceUpdate = true
+                              m.layoutCreated = false
+                            }
+                          }
+                          const ad = f.chatAdapter
+                          if (ad !== null) ad.notifyDataSetChanged()
+                        }
+                      } catch (err2) {
+                      }
                     }
                     p.requestLayout()
                     return true
@@ -325,7 +534,7 @@ var GripTouch = inu.jvm.defineClass({
                   return false
                 }
               }`,
-        captures: ["TOUCHES", "TSTATUS", "RATIO_MIN", "RATIO_MAX", "RATIO", "PREFS", "LA", "ArrayDeque", "ViewGroup"],
+        captures: ["TOUCHES", "TSTATUS", "RATIO_MIN", "RATIO_MAX", "RATIO", "PREFS", "LA", "ArrayDeque", "ViewGroup", "ChatActivity"],
         slots: 4,
         code: [
           ["capture", 0],
@@ -337,123 +546,153 @@ var GripTouch = inu.jvm.defineClass({
           ["capture", 6],
           ["capture", 7],
           ["capture", 8],
+          ["capture", 9],
           ["call", 0, ["incrementAndGet"], []],
           ["arg", [0]],
-          ["call", 10, ["getParent"], []],
-          ["eq", 11, [null]],
-          ["jumpIfFalsy", 12, 15],
+          ["call", 11, ["getParent"], []],
+          ["eq", 12, [null]],
+          ["jumpIfFalsy", 13, 16],
           ["return", [false]],
           ["arg", [1]],
-          ["call", 15, ["getActionMasked"], []],
-          ["eq", 16, [0]],
-          ["jumpIfFalsy", 17, 23],
-          ["call", 10, ["setAlpha"], [[1]]],
-          ["call", 11, ["requestDisallowInterceptTouchEvent"], [[true]]],
+          ["call", 16, ["getActionMasked"], []],
+          ["eq", 17, [0]],
+          ["jumpIfFalsy", 18, 24],
+          ["call", 11, ["setAlpha"], [[1]]],
+          ["call", 12, ["requestDisallowInterceptTouchEvent"], [[true]]],
           ["call", 1, ["set"], [["down"]]],
           ["return", [true]],
-          ["eq", 16, [2]],
-          ["jumpIfFalsy", 23, 54],
-          ["call", 11, ["getWidth"], []],
-          ["gt", 25, [0]],
-          ["jumpIfFalsy", 26, 53],
-          ["call", 10, ["getLeft"], []],
-          ["call", 15, ["getX"], []],
-          ["add", 28, 29],
-          ["mul", 30, [1e3]],
-          ["div", 31, 25],
-          ["call", 32, ["intValue"], []],
-          ["setSlot", 0, 33],
+          ["eq", 17, [2]],
+          ["jumpIfFalsy", 24, 55],
+          ["call", 12, ["getWidth"], []],
+          ["gt", 26, [0]],
+          ["jumpIfFalsy", 27, 54],
+          ["call", 11, ["getLeft"], []],
+          ["call", 16, ["getX"], []],
+          ["add", 29, 30],
+          ["mul", 31, [1e3]],
+          ["div", 32, 26],
+          ["call", 33, ["intValue"], []],
+          ["setSlot", 0, 34],
           ["getSlot", 0],
-          ["lt", 35, 2],
-          ["jumpIfFalsy", 36, 39],
+          ["lt", 36, 2],
+          ["jumpIfFalsy", 37, 40],
           ["setSlot", 0, 2],
           ["getSlot", 0],
-          ["gt", 39, 3],
-          ["jumpIfFalsy", 40, 43],
+          ["gt", 40, 3],
+          ["jumpIfFalsy", 41, 44],
           ["setSlot", 0, 3],
           ["getSlot", 0],
           ["call", 4, ["get"], []],
-          ["ne", 43, 44],
-          ["jumpIfFalsy", 45, 50],
+          ["ne", 44, 45],
+          ["jumpIfFalsy", 46, 51],
           ["getSlot", 0],
-          ["call", 4, ["set"], [47]],
-          ["call", 11, ["requestLayout"], []],
+          ["call", 4, ["set"], [48]],
+          ["call", 12, ["requestLayout"], []],
           ["getSlot", 0],
-          ["add", ["move r="], 50],
-          ["call", 1, ["set"], [51]],
+          ["add", ["move r="], 51],
+          ["call", 1, ["set"], [52]],
           ["return", [true]],
-          ["eq", 16, [1]],
-          ["setSlot", 1, 54],
-          ["jumpIfTruthy", 54, 59],
-          ["eq", 16, [3]],
-          ["setSlot", 1, 57],
+          ["eq", 17, [1]],
+          ["setSlot", 1, 55],
+          ["jumpIfTruthy", 55, 60],
+          ["eq", 17, [3]],
+          ["setSlot", 1, 58],
           ["getSlot", 1],
-          ["jumpIfFalsy", 59, 117],
-          ["call", 10, ["setAlpha"], [[0.6]]],
+          ["jumpIfFalsy", 60, 147],
+          ["call", 11, ["setAlpha"], [[0.6]]],
           ["call", 5, ["edit"], []],
           ["call", 4, ["get"], []],
-          ["call", 62, ["putInt"], [["ratio"], 63]],
-          ["call", 64, ["apply"], []],
+          ["call", 63, ["putInt"], [["ratio"], 64]],
+          ["call", 65, ["apply"], []],
           ["call", 4, ["get"], []],
-          ["add", ["up r="], 66],
-          ["call", 1, ["set"], [67]],
+          ["add", ["up r="], 67],
+          ["call", 1, ["set"], [68]],
           ["get", 6, ["instance"]],
-          ["ne", 69, [null]],
-          ["jumpIfFalsy", 70, 115],
+          ["ne", 70, [null]],
+          ["jumpIfFalsy", 71, 145],
           ["new", 7, []],
-          ["get", 69, ["actionBarLayout"]],
-          ["ne", 73, [null]],
-          ["jumpIfFalsy", 74, 79],
-          ["get", 69, ["actionBarLayout"]],
-          ["call", 76, ["getView"], []],
-          ["call", 72, ["add"], [77]],
-          ["get", 69, ["rightActionBarLayout"]],
-          ["ne", 79, [null]],
-          ["jumpIfFalsy", 80, 85],
-          ["get", 69, ["rightActionBarLayout"]],
-          ["call", 82, ["getView"], []],
-          ["call", 72, ["add"], [83]],
+          ["get", 70, ["actionBarLayout"]],
+          ["ne", 74, [null]],
+          ["jumpIfFalsy", 75, 80],
+          ["get", 70, ["actionBarLayout"]],
+          ["call", 77, ["getView"], []],
+          ["call", 73, ["add"], [78]],
+          ["get", 70, ["rightActionBarLayout"]],
+          ["ne", 80, [null]],
+          ["jumpIfFalsy", 81, 86],
+          ["get", 70, ["rightActionBarLayout"]],
+          ["call", 83, ["getView"], []],
+          ["call", 73, ["add"], [84]],
           ["setSlot", 2, [0]],
-          ["call", 72, ["isEmpty"], []],
-          ["not", 86],
-          ["setSlot", 1, 87],
-          ["jumpIfFalsy", 87, 93],
+          ["call", 73, ["isEmpty"], []],
+          ["not", 87],
+          ["setSlot", 1, 88],
+          ["jumpIfFalsy", 88, 94],
           ["getSlot", 2],
-          ["lt", 90, [5e3]],
-          ["setSlot", 1, 91],
+          ["lt", 91, [5e3]],
+          ["setSlot", 1, 92],
           ["getSlot", 1],
-          ["jumpIfFalsy", 93, 115],
-          ["call", 72, ["poll"], []],
+          ["jumpIfFalsy", 94, 116],
+          ["call", 73, ["poll"], []],
           ["getSlot", 2],
-          ["add", 96, [1]],
-          ["setSlot", 2, 97],
-          ["call", 95, ["forceLayout"], []],
-          ["instanceOf", 95, 8],
-          ["jumpIfFalsy", 100, 114],
+          ["add", 97, [1]],
+          ["setSlot", 2, 98],
+          ["call", 96, ["forceLayout"], []],
+          ["instanceOf", 96, 8],
+          ["jumpIfFalsy", 101, 115],
           ["setSlot", 3, [0]],
           ["getSlot", 3],
-          ["call", 95, ["getChildCount"], []],
-          ["lt", 103, 104],
-          ["jumpIfFalsy", 105, 114],
+          ["call", 96, ["getChildCount"], []],
+          ["lt", 104, 105],
+          ["jumpIfFalsy", 106, 115],
           ["getSlot", 3],
-          ["call", 95, ["getChildAt"], [107]],
-          ["call", 72, ["add"], [108]],
+          ["call", 96, ["getChildAt"], [108]],
+          ["call", 73, ["add"], [109]],
           ["getSlot", 3],
-          ["add", 110, [1]],
-          ["setSlot", 3, 111],
-          ["loop", 103],
-          ["loop", 86],
-          ["call", 11, ["requestLayout"], []],
-          ["return", [true]],
-          ["return", [true]],
+          ["add", 111, [1]],
+          ["setSlot", 3, 112],
+          ["loop", 104],
+          ["loop", 87],
+          ["get", 70, ["rightActionBarLayout"]],
+          ["eq", 116, [null]],
+          ["jumpIfFalsy", 117, 121],
+          ["setSlot", 1, [null]],
           ["jump", 123],
+          ["call", 116, ["getLastFragment"], []],
+          ["setSlot", 1, 121],
+          ["getSlot", 1],
+          ["ne", 123, [null]],
+          ["setSlot", 1, 124],
+          ["jumpIfFalsy", 124, 129],
+          ["instanceOf", 123, 9],
+          ["setSlot", 1, 127],
+          ["getSlot", 1],
+          ["jumpIfFalsy", 129, 143],
+          ["get", 123, ["messages"]],
+          ["ne", 131, [null]],
+          ["jumpIfFalsy", 132, 139],
+          ["iterate", 131],
+          ["advance", 134, 139],
+          ["set", 135, ["forceUpdate"], [true]],
+          ["set", 135, ["layoutCreated"], [false]],
+          ["loop", 135],
+          ["get", 123, ["chatAdapter"]],
+          ["ne", 139, [null]],
+          ["jumpIfFalsy", 140, 143],
+          ["call", 139, ["notifyDataSetChanged"], []],
+          ["jump", 145],
           ["catch"],
-          ["add", ["touch error: "], 119],
-          ["call", 1, ["set"], [120]],
+          ["call", 12, ["requestLayout"], []],
+          ["return", [true]],
+          ["return", [true]],
+          ["jump", 153],
+          ["catch"],
+          ["add", ["touch error: "], 149],
+          ["call", 1, ["set"], [150]],
           ["return", [false]]
         ],
-        tries: [[9, 14, 119], [15, 22, 119], [23, 53, 119], [54, 116, 119]]
-      }, [TOUCHES, TSTATUS, RATIO_MIN, RATIO_MAX, RATIO, PREFS, LA, ArrayDeque, ViewGroup])
+        tries: [[10, 15, 149], [16, 23, 149], [24, 54, 149], [55, 146, 149], [116, 143, 144]]
+      }, [TOUCHES, TSTATUS, RATIO_MIN, RATIO_MAX, RATIO, PREFS, LA, ArrayDeque, ViewGroup, ChatActivity])
     }
   }
 });

@@ -117,6 +117,65 @@ disposers.push(inu.xposed.hookAllOverloads(AU, 'getTabletLeftFragmentSize', {
   }),
 }))
 
+const JMath: any = inu.jvm.cls('java.lang.Math')
+const ChatActivity: any = inu.jvm.cls('org.telegram.ui.ChatActivity')
+
+// message bubbles size themselves by getMinTabletSide() (= right pane width for the stock split).
+// Compute it from the window width and our ratio, not from the pane's measured width:
+// that one is stale while the pane is hidden or mid-measure, and Telegram only rebuilds
+// a message when the width changes by more than 52dp, so a stale value sticks.
+disposers.push(inu.xposed.hookAllOverloads(AU, 'getMinTabletSide', {
+  before: inu.xposed.routine((ctx) => {
+    const r = RATIO.get()
+    if (r <= 0) return
+    const a = LA.instance
+    if (a === null || a.tabletFullSize) return
+    let width = AU.displaySize.x
+    const l = a.launchLayout
+    if (l !== null && l.getMeasuredWidth() > 0) width = l.getMeasuredWidth()
+    let left = width * r / 1000
+    const maxL = width - AU.dp(MIN_RIGHT_DP)
+    const minL = AU.dp(MIN_LEFT_DP)
+    if (left > maxL) left = maxL
+    if (left < minL) left = minL
+    ctx.setReturnValue(JMath.round(width - left))
+  }),
+}))
+
+// Albums (grouped media) size themselves by ChatMessageCell.getGroupPhotosWidth(), which
+// returns the WHOLE window width when AndroidUtilities.isInMultiwindow is true. We only fake
+// that flag during the launch layout's measure/layout, so cells re-measured at other times
+// (scrolling, drawing) flip between the full window width and the pane width: the album and
+// its caption spill out of the right pane, and the comments button flickers.
+// Answer it with the real right pane width whenever two panes are shown.
+const ChatMessageCell: any = inu.jvm.cls('org.telegram.ui.Cells.ChatMessageCell')
+disposers.push(inu.xposed.hookAllOverloads(ChatMessageCell, 'getGroupPhotosWidth', {
+  before: inu.xposed.routine((ctx) => {
+    const a = LA.instance
+    if (a === null || a.tabletFullSize || a.rightActionBarLayout === null) return
+    const l = a.launchLayout
+    if (l === null) return
+    const mo = ctx.thisObject.getMessageObject()
+    if (mo !== null && mo.preview) return
+    let width = l.getMeasuredWidth()
+    if (width <= 0) width = AU.displaySize.x
+    const r = RATIO.get()
+    let left = 0
+    if (r > 0) {
+      left = width * r / 1000
+      const maxL = width - AU.dp(MIN_RIGHT_DP)
+      const minL = AU.dp(MIN_LEFT_DP)
+      if (left > maxL) left = maxL
+      if (left < minL) left = minL
+    } else {
+      left = width * 35 / 100
+      const stockMin = AU.dp(320)
+      if (left < stockMin) left = stockMin
+    }
+    ctx.setReturnValue(width - left)
+  }),
+}))
+
 // grip view: a thin pill on the pane border that can be dragged with a finger or a mouse.
 // It is (re)created from the launch layout's own onLayout, so it survives activity
 // recreation, layout rebuilds and plugin reloads without relying on one-shot events.
@@ -124,7 +183,6 @@ const GradientDrawable: any = inu.jvm.cls('android.graphics.drawable.GradientDra
 const LayerDrawable: any = inu.jvm.cls('android.graphics.drawable.LayerDrawable')
 const Drawable: any = inu.jvm.cls('android.graphics.drawable.Drawable')
 const JArray: any = inu.jvm.cls('java.lang.reflect.Array')
-const JMath: any = inu.jvm.cls('java.lang.Math')
 const View: any = inu.jvm.cls('android.view.View')
 const PointerIcon: any = inu.jvm.cls('android.view.PointerIcon')
 const MeasureSpec: any = inu.jvm.cls('android.view.View$MeasureSpec')
@@ -192,6 +250,22 @@ const GripTouch = inu.jvm.defineClass({
                 if (w instanceof ViewGroup) {
                   for (let i = 0; i < w.getChildCount(); i++) q.add(w.getChildAt(i))
                 }
+              }
+              try {
+                const rl = a.rightActionBarLayout
+                const f = rl === null ? null : rl.getLastFragment()
+                if (f !== null && f instanceof ChatActivity) {
+                  const msgs = f.messages
+                  if (msgs !== null) {
+                    for (const m of msgs) {
+                      m.forceUpdate = true
+                      m.layoutCreated = false
+                    }
+                  }
+                  const ad = f.chatAdapter
+                  if (ad !== null) ad.notifyDataSetChanged()
+                }
+              } catch (err2) {
               }
             }
             p.requestLayout()
