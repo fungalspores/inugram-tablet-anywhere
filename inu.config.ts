@@ -9,7 +9,7 @@ export default defineConfig({
         id: 'com.github.fungalspores.tablet-anywhere',
         name: 'Tablet Anywhere',
         author: 'fungalspores',
-        version: '1.0.0',
+        version: '1.2.0',
         description: {
           en: 'Two-pane tablet layout in split-screen, windows and portrait, not only fullscreen',
           ru: 'Планшетный режим (две панели) в split-screen, окне и портрете, а не только на весь экран',
